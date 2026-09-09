@@ -2,8 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hasCredentials } from "@/lib/claude";
 import { describeError, spawnAgent } from "@/lib/network";
+import { checkAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+// Persona design is one model call; 60s is the Vercel Hobby ceiling.
+export const maxDuration = 60;
 
 export async function GET() {
   const agents = await prisma.agent.findMany({
@@ -14,6 +17,9 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = checkAdmin(request);
+  if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+
   const body = await request.json().catch(() => null);
   const description = typeof body?.description === "string" ? body.description.trim() : "";
 

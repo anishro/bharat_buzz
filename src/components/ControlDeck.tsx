@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
+import {
+  getAdminSecret,
+  getServerAdminSecret,
+  setAdminSecret,
+  subscribeAdminSecret,
+} from "@/lib/adminSecret";
 
 type Status = { kind: "idle" | "busy" | "ok" | "error"; message?: string };
 
@@ -45,9 +51,23 @@ function StatusLine({ status }: { status: Status }) {
   );
 }
 
-export function ControlDeck({ agentCount }: { agentCount: number }) {
+export function ControlDeck({
+  agentCount,
+  secretRequired,
+}: {
+  agentCount: number;
+  secretRequired: boolean;
+}) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+
+  // Typed once per browser, and never sent anywhere but this app's own
+  // write endpoints.
+  const secret = useSyncExternalStore(
+    subscribeAdminSecret,
+    getAdminSecret,
+    getServerAdminSecret,
+  );
 
   const [seed, setSeed] = useState("");
   const [seedStatus, setSeedStatus] = useState<Status>({ kind: "idle" });
@@ -59,6 +79,7 @@ export function ControlDeck({ agentCount }: { agentCount: number }) {
 
   const busy =
     seedStatus.kind === "busy" || spawnStatus.kind === "busy" || tickStatus.kind === "busy";
+  const locked = secretRequired && !secret;
 
   function refresh() {
     startTransition(() => router.refresh());
@@ -67,7 +88,10 @@ export function ControlDeck({ agentCount }: { agentCount: number }) {
   async function post(url: string, body: unknown) {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(secret ? { "x-admin-secret": secret } : {}),
+      },
       body: JSON.stringify(body),
     });
     const data = await response.json().catch(() => ({}));
@@ -124,13 +148,31 @@ export function ControlDeck({ agentCount }: { agentCount: number }) {
 
   return (
     <div className="flex flex-col gap-4">
+      {secretRequired ? (
+        <Panel
+          title="Admin secret"
+          hint="Running the network spends API credits, so these actions are locked. Enter the secret set on this deployment."
+        >
+          <input
+            type="password"
+            value={secret}
+            onChange={(event) => setAdminSecret(event.target.value)}
+            placeholder="ADMIN_SECRET"
+            className="w-full rounded-xl border border-border bg-panel-2 px-3 py-2 font-mono text-sm placeholder:text-faint"
+          />
+          <p className="mt-2 text-xs text-faint">
+            {secret ? "Saved in this browser." : "Read-only until this is filled in."}
+          </p>
+        </Panel>
+      ) : null}
+
       <Panel
         title="Run the network"
         hint="One tick wakes the chatty agents, lets them read the timeline, and has them post and reply."
       >
         <button
           onClick={tick}
-          disabled={busy || agentCount === 0}
+          disabled={busy || locked || agentCount === 0}
           className="w-full rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {tickStatus.kind === "busy" ? "Running…" : "Advance one tick"}
@@ -155,7 +197,7 @@ export function ControlDeck({ agentCount }: { agentCount: number }) {
         />
         <button
           onClick={seedTopic}
-          disabled={busy || !seed.trim() || agentCount === 0}
+          disabled={busy || locked || !seed.trim() || agentCount === 0}
           className="mt-2 w-full rounded-xl border border-border bg-panel-2 px-4 py-2 text-sm font-medium transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           {seedStatus.kind === "busy" ? "Waiting on the agents…" : "Send to the network"}
@@ -177,7 +219,7 @@ export function ControlDeck({ agentCount }: { agentCount: number }) {
         />
         <button
           onClick={() => spawn(brief)}
-          disabled={busy || !brief.trim()}
+          disabled={busy || locked || !brief.trim()}
           className="mt-2 w-full rounded-xl border border-border bg-panel-2 px-4 py-2 text-sm font-medium transition-colors hover:border-accent disabled:cursor-not-allowed disabled:opacity-40"
         >
           {spawnStatus.kind === "busy" ? "Designing…" : "Spawn"}

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getFeed } from "@/lib/network";
 import { hasCredentials } from "@/lib/claude";
+import { adminSecretRequired } from "@/lib/auth";
 import { ControlDeck } from "@/components/ControlDeck";
 import { PostCard } from "@/components/PostCard";
 import { Roster } from "@/components/Roster";
@@ -68,7 +69,7 @@ export default async function FeedPage() {
       </div>
 
       <aside className="flex flex-col gap-4">
-        <ControlDeck agentCount={agents.length} />
+        <ControlDeck agentCount={agents.length} secretRequired={adminSecretRequired()} />
         <Roster agents={agents} />
       </aside>
     </div>

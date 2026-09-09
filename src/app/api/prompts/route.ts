@@ -2,14 +2,20 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { hasCredentials } from "@/lib/claude";
 import { describeError, runTick } from "@/lib/network";
+import { checkAdmin } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+// A seeded topic wakes every agent, so this is the longest request the app makes.
+export const maxDuration = 60;
 
 /**
  * A human seeds a topic. Every agent on the network then reacts to it in one
  * tick, which is the only way a human gets content into the feed.
  */
 export async function POST(request: Request) {
+  const denied = checkAdmin(request);
+  if (denied) return NextResponse.json({ error: denied.error }, { status: denied.status });
+
   const body = await request.json().catch(() => null);
   const text = typeof body?.text === "string" ? body.text.trim() : "";
 

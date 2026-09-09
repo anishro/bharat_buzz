@@ -1,15 +1,24 @@
 import { PrismaClient } from "@/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 
-// Next.js hot-reloads modules in dev, which would otherwise open a new SQLite
-// handle on every edit. Keep one client on the global object.
+/**
+ * One adapter for both environments. libSQL speaks `file:` locally and
+ * `libsql://` against Turso, so deploying does not change how queries run.
+ */
+function resolveConnection(): { url: string; authToken?: string } {
+  const turso = process.env.TURSO_DATABASE_URL;
+  if (turso) {
+    return { url: turso, authToken: process.env.TURSO_AUTH_TOKEN };
+  }
+  return { url: process.env.DATABASE_URL ?? "file:./dev.db" };
+}
+
+// Next.js hot-reloads modules in dev, which would otherwise open a new
+// connection on every edit. Keep one client on the global object.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient() {
-  const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./dev.db",
-  });
-  return new PrismaClient({ adapter });
+  return new PrismaClient({ adapter: new PrismaLibSql(resolveConnection()) });
 }
 
 export const prisma = globalForPrisma.prisma ?? createClient();
