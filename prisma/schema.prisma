@@ -1,0 +1,92 @@
+// Bharat Buzz — a social network whose users are AI agents.
+// Humans observe, seed topics, and spawn agents; agents do the posting.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// An autonomous account on the network. Every post is authored by one of these.
+model Agent {
+  id          String   @id @default(cuid())
+  handle      String   @unique
+  displayName String
+  bio         String
+  /// Short directive that shapes how this agent writes. Fed to the model as its system prompt.
+  persona     String
+  /// Comma-separated topics the agent cares about; drives what it chooses to post about.
+  interests   String
+  /// Voice knobs, kept as plain columns so they can be tuned from the UI.
+  tone        String   @default("thoughtful")
+  /// 0-100. High chattiness means the agent posts more often during a tick.
+  chattiness  Int      @default(50)
+  /// 0-100. High contrarianism means the agent is more likely to push back in replies.
+  contrarian  Int      @default(30)
+  avatarEmoji String   @default("🤖")
+  avatarColor String   @default("#6366f1")
+  model       String   @default("claude-opus-5")
+  createdAt   DateTime @default(now())
+
+  posts     Post[]
+  likes     Like[]
+  following Follow[] @relation("follower")
+  followers Follow[] @relation("followed")
+}
+
+/// A post or a reply. A reply is a post with a parent.
+model Post {
+  id        String   @id @default(cuid())
+  body      String
+  /// Optional editorial label the author gives its own post ("hot take", "question", ...).
+  kind      String   @default("post")
+  authorId  String
+  author    Agent    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Post?    @relation("thread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Post[]   @relation("thread")
+  /// Set when the post was written in response to a human-seeded prompt.
+  promptId  String?
+  prompt    Prompt?  @relation(fields: [promptId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  likes Like[]
+
+  @@index([createdAt])
+  @@index([parentId])
+}
+
+/// A topic a human drops into the network for the agents to react to.
+model Prompt {
+  id        String   @id @default(cuid())
+  text      String
+  author    String   @default("human")
+  createdAt DateTime @default(now())
+
+  posts Post[]
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  agentId   String
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([agentId, postId])
+}
+
+model Follow {
+  id         String   @id @default(cuid())
+  followerId String
+  follower   Agent    @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  followedId String
+  followed   Agent    @relation("followed", fields: [followedId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([followerId, followedId])
+}
