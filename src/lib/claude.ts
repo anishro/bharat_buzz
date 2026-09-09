@@ -80,6 +80,44 @@ async function parseJson<T extends z.ZodType>({
 }
 
 /* ------------------------------------------------------------------ */
+/* Output repair                                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Occasionally the model writes a non-ASCII character as its raw UTF-8 bytes
+ * rather than the character — an em dash arriving as "e2\n80\n94". Bare hex
+ * pairs on their own lines are not something prose does, so a run of three or
+ * more that decodes to valid UTF-8 is safe to fold back.
+ *
+ * Deliberately narrow: it requires newline separation, so the hex offsets and
+ * byte strings some agents post on purpose ("0x1e4a0", "de ad be ef") are left
+ * alone.
+ */
+export function repairByteEscapes(text: string): string {
+  return text.replace(/(?:\n\s*[0-9a-f]{2}){3,}/gi, (run) => {
+    const bytes = run.match(/[0-9a-f]{2}/gi);
+    if (!bytes) return run;
+    try {
+      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(
+        Uint8Array.from(bytes.map((byte) => parseInt(byte, 16))),
+      );
+      // Only accept a decode that produced real characters, not more control junk.
+      return /\p{C}/u.test(decoded) ? run : decoded;
+    } catch {
+      return run; // not valid UTF-8 — leave it exactly as written
+    }
+  });
+}
+
+/** Everything an agent writes passes through here before it is stored. */
+export function cleanBody(text: string): string {
+  return repairByteEscapes(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/* ------------------------------------------------------------------ */
 /* Persona design                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -149,7 +187,8 @@ House rules for every post:
 - Write the post text only. No quotation marks around it, no "Here's my post:", no stage directions.
 - Do not use hashtags unless your persona genuinely would.
 - If you are reacting to something on the timeline, react to the substance of it. Do not summarise it back.
-- Never break character to mention that you are an AI model, unless your persona is specifically about that.`;
+- Never break character to mention that you are an AI model, unless your persona is specifically about that.
+- Type punctuation directly as characters. Never write an escape sequence, a unicode codepoint, or hex byte values in place of a character.`;
 
 export type FeedContext = {
   /** Recent posts the agent can see, newest first. */
@@ -177,7 +216,7 @@ export async function composePost(
     ? `\n\nA human just dropped this topic into the network. Respond to it in your own voice, from your own angle:\n"${context.seed}"`
     : "";
 
-  return parseJson({
+  const generated = await parseJson({
     schema: PostSchema,
     model: agent.model,
     system: POST_SYSTEM,
@@ -192,6 +231,8 @@ ${timeline}${seed}
 
 Write your next post.`,
   });
+
+  return { ...generated, body: cleanBody(generated.body) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -213,7 +254,8 @@ House rules for every reply:
 - Reply text only — no quotation marks around it, no preamble.
 - Engage with what was actually said. Agreeing blandly is the worst possible reply; so is disagreeing for sport when you have nothing to add.
 - Your contrarian score tells you how inclined you are to push back. A low score does not mean flattery, it means you build on the idea instead of fighting it.
-- Never break character to mention that you are an AI model, unless your persona is specifically about that.`;
+- Never break character to mention that you are an AI model, unless your persona is specifically about that.
+- Type punctuation directly as characters. Never write an escape sequence, a unicode codepoint, or hex byte values in place of a character.`;
 
 export async function composeReply(
   agent: {
@@ -228,7 +270,7 @@ export async function composeReply(
 ): Promise<GeneratedReply> {
   const rendered = thread.map((p) => `@${p.handle}: ${p.body}`).join("\n");
 
-  return parseJson({
+  const generated = await parseJson({
     schema: ReplySchema,
     model: agent.model,
     system: REPLY_SYSTEM,
@@ -243,4 +285,6 @@ ${rendered}
 
 Write your reply to the last post in that thread.`,
   });
+
+  return { ...generated, body: cleanBody(generated.body) };
 }
