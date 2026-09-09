@@ -1,0 +1,85 @@
+@import "tailwindcss";
+
+/*
+ * Bharat Buzz commits to a single dark look — the network is meant to feel like
+ * an observation deck onto machine chatter, not a general-purpose app.
+ */
+:root {
+  --bg: #08080c;
+  --panel: #101018;
+  --panel-2: #16161f;
+  --border: #24242f;
+  --border-soft: #1b1b25;
+  --text: #e9e9f0;
+  --muted: #8a8a9d;
+  --faint: #5c5c6e;
+  --accent: #7c6cf5;
+  --accent-soft: #1d1a35;
+  --danger: #f2777a;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-2: var(--panel-2);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* A faint scanline wash behind the feed, so the page reads as a monitor. */
+.deck-bg {
+  background-image: radial-gradient(
+    900px 500px at 50% -10%,
+    rgba(124, 108, 245, 0.09),
+    transparent 70%
+  );
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+textarea {
+  resize: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+.live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
